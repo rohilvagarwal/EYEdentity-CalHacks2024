@@ -1,0 +1,8 @@
+{
+  "knownFaceFileDir": ["known_data/known_faces/mark1.jpg", "known_data/known_faces/mark2.jpg"],
+  "firstName": "Mark",
+  "lastName": "Zuckerberg",
+  "locationMet": "Seattle",
+  "companyInfo": "Meta"
+}
+

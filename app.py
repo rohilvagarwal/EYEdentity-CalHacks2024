@@ -4,20 +4,35 @@ import numpy as np
 from flask import Flask, request, jsonify, render_template
 from PIL import Image
 import io
+import json
 
 app = Flask(__name__)
 
 # Load known faces
-known_faces = {}
-known_faces_dir = "known_faces"
+knownFaces = {}
+knownDataDir = "known_data"
 
-for filename in os.listdir(known_faces_dir):
-	if filename.endswith(".jpg") or filename.endswith(".png"):
-		name = os.path.splitext(filename)[0]
-		image_path = os.path.join(known_faces_dir, filename)
-		face_image = face_recognition.load_image_file(image_path)
-		face_encoding = face_recognition.face_encodings(face_image)[0]
-		known_faces[name] = face_encoding
+for filename in os.listdir(knownDataDir):
+	if filename.endswith(".json"):  #process JSON files
+		json_path = os.path.join(knownDataDir, filename)
+
+		# Load the JSON metadata
+		with open(json_path, 'r') as json_file:
+			metadata = json.load(json_file)
+			first_name = metadata["firstName"]
+			last_name = metadata["lastName"]
+			full_name = f"{first_name} {last_name}"
+			image_path = metadata["knownFaceFileDir"]  # Get the image path from the JSON
+
+			# Load and encode the face from the image path
+			face_image = face_recognition.load_image_file(image_path)
+			face_encoding = face_recognition.face_encodings(face_image)[0]
+
+			# Store the face encoding and metadata in known_faces
+			knownFaces[full_name] = {
+				"encoding": face_encoding,
+				"metadata": metadata  # Store additional metadata (companyInfo, locationMet, etc.)
+			}
 
 
 @app.route('/')
@@ -44,17 +59,46 @@ def recognize_face():
 		face_encodings = face_recognition.face_encodings(image, face_locations)
 
 		results = []
-		for face_encoding in face_encodings: #if multiple faces
-			matches = face_recognition.compare_faces(list(known_faces.values()), face_encoding) #current face vs known faces
-			name = "Unknown"
-			face_distances = face_recognition.face_distance(list(known_faces.values()), face_encoding) #smaller the num, closer the match
+		for face_encoding in face_encodings:  # If multiple faces
+			minAccuracy = 0.45
 
-			best_match_index = np.argmin(face_distances) #pick smallest num index
+			# Compare current face encoding to known faces
+			matches = face_recognition.compare_faces(
+				[data["encoding"] for data in knownFaces.values()],
+				face_encoding,
+				tolerance=1-minAccuracy
+			)
+
+			face_distances = face_recognition.face_distance(
+				[data["encoding"] for data in knownFaces.values()],
+				face_encoding
+			)
+			best_match_index = np.argmin(face_distances)  # Pick smallest distance (closest match)
+
+			face_accuracies = [1-x for x in face_distances]
+
+			print(matches)
+			print(face_accuracies)
 
 			if matches[best_match_index]:
-				name = list(known_faces.keys())[best_match_index]
-				print(name)
-			results.append(name)
+				# Get the matched person's name and metadata
+				matched_name = list(knownFaces.keys())[best_match_index]
+				metadata = knownFaces[matched_name]["metadata"]
+				print(f"Match found: {matched_name}")
+
+				# Include metadata in the result
+				result = {
+					"name": matched_name,
+					"accuracy": face_accuracies[best_match_index],
+					"firstName": metadata["firstName"],
+					"lastName": metadata["lastName"],
+					"companyInfo": metadata.get("companyInfo", "N/A"),
+					"locationMet": metadata.get("locationMet", "Unknown")
+				}
+			else:
+				result = {"name": "Unknown"}
+
+			results.append(result)
 
 		return jsonify({"recognized_faces": results})
 
