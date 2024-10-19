@@ -1,6 +1,6 @@
 import os
 import uuid
-
+import base64
 import face_recognition
 import numpy as np
 from flask import Flask, request, jsonify, render_template
@@ -56,58 +56,92 @@ def index():
 
 @app.route('/recognize', methods=['POST'])
 def recognize_face():
-	if 'file' not in request.files:
-		return jsonify({"error": "No file part"}), 400
+	# if 'file' not in request.files:
+	# 	return jsonify({"error": "No file part"}), 400
+	#
+	# file = request.files['file']
+	# if file.filename == '':
+	# 	return jsonify({"error": "No selected file"}), 400
 
-	file = request.files['file']
-	if file.filename == '':
-		return jsonify({"error": "No selected file"}), 400
+	data = request.json.get('data')  # Extract base64 image data from JSON payload
 
-	if file:
-		# Read the image file
-		image_bytes = file.read()
-		image = face_recognition.load_image_file(io.BytesIO(image_bytes))
+	if not data:
+		return jsonify({"error": "No base64-encoded data provided"}), 400
 
-		# Find face locations and encodings
-		face_locations = face_recognition.face_locations(image)
-		face_encodings = face_recognition.face_encodings(image, face_locations)
+	try:
+		# Step 1: Decode base64 string to bytes
+		decoded_bytes = base64.b64decode(data)
 
-		results = []
-		for face_encoding in face_encodings:  # If multiple faces
-			minAccuracy = 0.45
-			best_match = None
-			best_accuracy = 0
+		# Step 2: Convert bytes to uint8 array
+		uint8_array = np.frombuffer(decoded_bytes, dtype=np.uint8)
 
-			# Compare current face encoding to known faces
-			for person, data in knownFaces.items():
-				# Compare the input face with all known encodings for this person
-				matches = face_recognition.compare_faces(data["encodings"], face_encoding, tolerance=1 - minAccuracy)
-				face_distances = face_recognition.face_distance(data["encodings"], face_encoding)
-				best_match_index = np.argmin(face_distances)  # Best match for this person
-				accuracy = 1 - face_distances[best_match_index]  # Higher means better match
+		# Reshape the array to image dimensions (assuming it's a valid image)
+		# You might need to adjust the shape based on your image size and channels
+		image = uint8_array.reshape((300, 400, 4))
 
-				# If any match is found, pick the best accuracy
-				if matches[best_match_index] and accuracy > best_accuracy:
-					best_match = person
-					best_accuracy = accuracy
+		# Step 3: Load the image from the numpy array using PIL
+		# Convert numpy array to PIL Image
+		pil_image = Image.fromarray(image)
 
-			# Prepare the result for the best match found
-			if best_match:
-				metadata = knownFaces[best_match]["metadata"]
-				result = {
-					"name": best_match,
-					"accuracy": best_accuracy,
-					"firstName": metadata["firstName"],
-					"lastName": metadata["lastName"],
-					"companyInfo": metadata.get("companyInfo", "N/A"),
-					"locationMet": metadata.get("locationMet", "Unknown")
-				}
-			else:
-				result = {"name": "Unknown"}
+		# # Convert PIL image to a format suitable for face_recognition (numpy array)
+		# image_np = np.array(pil_image)
 
-			results.append(result)
+		# Create a BytesIO object to hold the PNG image data
+		png_image = io.BytesIO()
 
-		return jsonify({"recognized_faces": results})
+		# Save the PIL image as PNG into the BytesIO object
+		pil_image.save(png_image, format='PNG')
+
+		# To access the raw PNG data, you need to seek back to the start of the BytesIO object
+		png_image.seek(0)
+
+		if png_image:
+			# Read the image file
+			image_bytes = png_image.read()
+			image = face_recognition.load_image_file(io.BytesIO(image_bytes))
+
+			# Find face locations and encodings
+			face_locations = face_recognition.face_locations(image)
+			face_encodings = face_recognition.face_encodings(image, face_locations)
+
+			results = []
+			for face_encoding in face_encodings:  # If multiple faces
+				minAccuracy = 0.45
+				best_match = None
+				best_accuracy = 0
+
+				# Compare current face encoding to known faces
+				for person, data in knownFaces.items():
+					# Compare the input face with all known encodings for this person
+					matches = face_recognition.compare_faces(data["encodings"], face_encoding, tolerance=1 - minAccuracy)
+					face_distances = face_recognition.face_distance(data["encodings"], face_encoding)
+					best_match_index = np.argmin(face_distances)  # Best match for this person
+					accuracy = 1 - face_distances[best_match_index]  # Higher means better match
+
+					# If any match is found, pick the best accuracy
+					if matches[best_match_index] and accuracy > best_accuracy:
+						best_match = person
+						best_accuracy = accuracy
+
+				# Prepare the result for the best match found
+				if best_match:
+					metadata = knownFaces[best_match]["metadata"]
+					result = {
+						"name": best_match,
+						"accuracy": best_accuracy,
+						"firstName": metadata["firstName"],
+						"lastName": metadata["lastName"],
+						"companyInfo": metadata.get("companyInfo", "N/A"),
+						"locationMet": metadata.get("locationMet", "Unknown")
+					}
+				else:
+					result = {"name": "Unknown"}
+
+				results.append(result)
+
+			return jsonify({"recognized_faces": results})
+	except Exception as e:
+		return jsonify({"error": f"Error processing data: {str(e)}"}), 500
 
 
 """
