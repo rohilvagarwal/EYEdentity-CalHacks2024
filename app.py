@@ -1,38 +1,52 @@
 import os
+import uuid
+
 import face_recognition
 import numpy as np
 from flask import Flask, request, jsonify, render_template
 from PIL import Image
 import io
 import json
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
 # Load known faces
 knownFaces = {}
 knownDataDir = "known_data"
+knownFacesDir = os.path.join(knownDataDir, "known_faces")
 
-for filename in os.listdir(knownDataDir):
-	if filename.endswith(".json"):  #process JSON files
-		json_path = os.path.join(knownDataDir, filename)
 
-		# Load the JSON metadata
-		with open(json_path, 'r') as json_file:
-			metadata = json.load(json_file)
-			first_name = metadata["firstName"]
-			last_name = metadata["lastName"]
-			full_name = f"{first_name} {last_name}"
-			image_path = metadata["knownFaceFileDir"]  # Get the image path from the JSON
+def loadKnownFaces():
+	for filename in os.listdir(knownDataDir):
+		if filename.endswith(".json"):  #process JSON files
+			json_path = os.path.join(knownDataDir, filename)
 
-			# Load and encode the face from the image path
-			face_image = face_recognition.load_image_file(image_path)
-			face_encoding = face_recognition.face_encodings(face_image)[0]
+			# Load the JSON metadata
+			with open(json_path, 'r') as json_file:
+				metadata = json.load(json_file)
+				first_name = metadata["firstName"]
+				last_name = metadata["lastName"]
+				full_name = f"{first_name} {last_name}"
+				# Check if knownFaceFileDir is a list (for multiple images)
+				face_image_paths = metadata["knownFaceFileDir"]
 
-			# Store the face encoding and metadata in known_faces
-			knownFaces[full_name] = {
-				"encoding": face_encoding,
-				"metadata": metadata  # Store additional metadata (companyInfo, locationMet, etc.)
-			}
+				if not isinstance(face_image_paths, list):
+					face_image_paths = [face_image_paths]
+
+				# Load and encode multiple faces for this person
+				face_encodings = []
+				for image_path in face_image_paths:
+					face_image = face_recognition.load_image_file(image_path)
+					face_encoding = face_recognition.face_encodings(face_image)[0]  # Assumes at least one face
+					face_encodings.append(face_encoding)
+
+				# Store the list of face encodings and metadata in knownFaces
+				global knownFaces
+				knownFaces[full_name] = {
+					"encodings": face_encodings,
+					"metadata": metadata  # Store additional metadata
+				}
 
 
 @app.route('/')
@@ -61,35 +75,28 @@ def recognize_face():
 		results = []
 		for face_encoding in face_encodings:  # If multiple faces
 			minAccuracy = 0.45
+			best_match = None
+			best_accuracy = 0
 
 			# Compare current face encoding to known faces
-			matches = face_recognition.compare_faces(
-				[data["encoding"] for data in knownFaces.values()],
-				face_encoding,
-				tolerance=1-minAccuracy
-			)
+			for person, data in knownFaces.items():
+				# Compare the input face with all known encodings for this person
+				matches = face_recognition.compare_faces(data["encodings"], face_encoding, tolerance=1 - minAccuracy)
+				face_distances = face_recognition.face_distance(data["encodings"], face_encoding)
+				best_match_index = np.argmin(face_distances)  # Best match for this person
+				accuracy = 1 - face_distances[best_match_index]  # Higher means better match
 
-			face_distances = face_recognition.face_distance(
-				[data["encoding"] for data in knownFaces.values()],
-				face_encoding
-			)
-			best_match_index = np.argmin(face_distances)  # Pick smallest distance (closest match)
+				# If any match is found, pick the best accuracy
+				if matches[best_match_index] and accuracy > best_accuracy:
+					best_match = person
+					best_accuracy = accuracy
 
-			face_accuracies = [1-x for x in face_distances]
-
-			print(matches)
-			print(face_accuracies)
-
-			if matches[best_match_index]:
-				# Get the matched person's name and metadata
-				matched_name = list(knownFaces.keys())[best_match_index]
-				metadata = knownFaces[matched_name]["metadata"]
-				print(f"Match found: {matched_name}")
-
-				# Include metadata in the result
+			# Prepare the result for the best match found
+			if best_match:
+				metadata = knownFaces[best_match]["metadata"]
 				result = {
-					"name": matched_name,
-					"accuracy": face_accuracies[best_match_index],
+					"name": best_match,
+					"accuracy": best_accuracy,
 					"firstName": metadata["firstName"],
 					"lastName": metadata["lastName"],
 					"companyInfo": metadata.get("companyInfo", "N/A"),
@@ -101,6 +108,89 @@ def recognize_face():
 			results.append(result)
 
 		return jsonify({"recognized_faces": results})
+
+
+"""
+API Endpoint: /add_person (POST)
+
+Request Schema:
+---------------
+Form Data:
+1. metadata: (required) JSON string with:
+   - firstName (string, required)
+   - lastName (string, required)
+   Example:
+   {
+     "firstName": "John",
+     "lastName": "Doe"
+   }
+2. files[]: (required) One or more image files (.jpg, .jpeg, .png)
+
+Response:
+---------
+Success (200 OK):
+{
+    "message": "Person added successfully",
+    "metadata_file": "John_Doe.json",
+    "images": ["path_to_image1", "path_to_image2"]
+}
+
+Error (400 Bad Request):
+- Missing metadata, images, or unsupported file format.
+"""
+
+
+@app.route('/add_person', methods=['POST'])
+def add_person():
+	if 'metadata' not in request.form or 'files[]' not in request.files:
+		return jsonify({"error": "Metadata and images are required"}), 400
+
+	# Retrieve metadata
+	metadata = request.form.get('metadata')
+	metadata = json.loads(metadata)
+
+	# Retrieve first and last name to generate unique JSON file and image names
+	first_name = metadata.get("firstName")
+	last_name = metadata.get("lastName")
+
+	if not first_name or not last_name:
+		return jsonify({"error": "First and Last name are required in metadata"}), 400
+
+	# Prepare unique file paths
+	json_filename = f"{first_name}_{last_name}.json"
+	json_filepath = os.path.join(knownDataDir, json_filename)
+
+	image_paths = []
+
+	# Loop through each file in the request
+	for img in request.files.getlist('files[]'):
+		# Get the original filename's extension (e.g., .jpg, .png)
+		_, file_extension = os.path.splitext(img.filename)
+		if file_extension.lower() not in ['.png', '.jpg', '.jpeg']:
+			return jsonify({"error": "Only PNG, JPG, and JPEG files are allowed"}), 400
+
+		# Create a unique filename with the correct extension
+		unique_filename = f"{first_name}_{last_name}_{uuid.uuid4().hex}{file_extension}"
+		image_save_path = os.path.join(knownFacesDir, unique_filename)
+
+		# Save image to known_faces directory
+		img.save(image_save_path)
+		image_paths.append(image_save_path)
+
+	# Update the metadata to include the saved image paths
+	metadata["knownFaceFileDir"] = image_paths
+
+	# Save metadata as JSON in the known_data directory
+	with open(json_filepath, 'w') as json_file:
+		json.dump(metadata, json_file, indent=4)
+
+	loadKnownFaces()
+
+	return jsonify({
+		"message": "Person added successfully",
+		"metadata_file": json_filename,
+		"images": image_paths
+	}), 200
 
 
 if __name__ == '__main__':
