@@ -174,8 +174,8 @@ def recognize_face():
 				"firstName": "Sanjay",
 				"lastName": "Adhikesaven",
 				"locationMet": "Bay Area",
-				"companyInfo": "Chik-fil-a",
-				"description": "Blood Type: AB-\nAllergies: Bee Stings, Dairy\nConditions: Anemia, Eczema\nMedications: Ferrous Sulfate, Hydrocortisone"
+				"companyInfo": "Snap",
+				"description": "Blood Type: AB-\nAllergies: Latex, Dairy\nConditions: Anemia, Eczema\nMedications: Ferrous Sulfate, Hydrocortisone"
 			}
 			pretty_json = json.dumps(result, indent=4)
 			print(pretty_json)
