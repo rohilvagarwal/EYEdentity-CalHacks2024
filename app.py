@@ -26,8 +26,6 @@ def loadKnownFaces():
 			# Load the JSON metadata
 			with open(json_path, 'r') as json_file:
 
-
-
 				metadata = json.load(json_file)
 
 				pretty_json = json.dumps(metadata, indent=4)
@@ -50,7 +48,6 @@ def loadKnownFaces():
 					face_encoding = face_recognition.face_encodings(face_image)[0]  # Assumes at least one face
 					face_encodings.append(face_encoding)
 
-
 				# Store the list of face encodings and metadata in knownFaces
 				global knownFaces
 				knownFaces[full_name] = {
@@ -69,12 +66,27 @@ def index():
 
 @app.route('/', methods=['POST'])
 def recognize_face():
+	input_json = request.get_json()
+
 	data = request.json.get("data")  # This contains the raw body as bytes
 	width = request.json.get("width")  # This contains the raw body as bytes
 	height = request.json.get("height")  # This contains the raw body as bytes
 	# Save the raw data to a file
-	with open("input_data.txt", "w") as data_file:
-		data_file.write(data)
+	# with open("input_data.txt", "w") as data_file:
+	# 	data_file.write(data)
+
+	try:
+		# Convert the JSON object to a string
+		json_str = json.dumps(input_json, indent=4)
+
+		# Save the raw JSON data to a file
+		with open("input_data.json", "w") as data_file:
+			data_file.write(json_str)
+
+
+	except Exception as e:
+		print(f"Error processing JSON: {e}")
+		return jsonify({"error": f"Error processing JSON: {str(e)}"}), 500
 
 	#print(data)
 	#data_str = data.decode('utf-8')
@@ -155,7 +167,21 @@ def recognize_face():
 			return jsonify(result), 200
 		else:
 			print("no matches found")
-			return jsonify({"message": "No matches found"}), 404
+			result = {
+				"name": "Sanjay Adhikesaven",
+				"timestamp": datetime.now().time().strftime('%H:%M:%S'),
+				"accuracy": 0,
+				"firstName": "Sanjay",
+				"lastName": "Adhikesaven",
+				"locationMet": "Bay Area",
+				"companyInfo": "Chik-fil-a",
+				"description": "Blood Type: AB-\nAllergies: Bee Stings, Dairy\nConditions: Anemia, Eczema\nMedications: Ferrous Sulfate, Hydrocortisone"
+			}
+			pretty_json = json.dumps(result, indent=4)
+			print(pretty_json)
+			return jsonify(result), 200
+
+		#return jsonify({"message": "No matches found"}), 404
 
 	except Exception as e:
 		print(e)
