@@ -1,6 +1,6 @@
 # EYEdentity
 
-### 🏆 **CalHacks 1st Place Winner for Snap**
+### 🏆 **CalHacks 11.0 Snap 1st Place Winner **
 
 [![Watch EYEdentity Demo](https://img.youtube.com/vi/iVBfLWnqzRc/0.jpg)](https://www.youtube.com/watch?v=iVBfLWnqzRc)
 > *Click to watch the demo video*
