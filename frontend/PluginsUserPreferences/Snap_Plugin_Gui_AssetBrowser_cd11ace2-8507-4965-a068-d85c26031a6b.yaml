@@ -1,0 +1,42 @@
+CollapsedEntities:
+  type: stringset
+  value:
+    size: 36
+    values:
+      - Base.png
+      - Echopark.hdr
+      - Face Crop Texture.faceCropTexture
+      - Face Mask.mat
+      - Face Mesh.facemesh
+      - Face Mesh.mat
+      - FaceMask.png
+      - FaceMaskOpacity.jpg
+      - FaceMeshTexture.jpg
+      - Image 1.mat
+      - Image.mat
+      - Image.png
+      - MaterialParams.png
+      - Normal.png
+      - PBR 1.mat
+      - PBR 2.mat
+      - PBR.mat
+      - Scripts/Base64.ts
+      - Scripts/CaptureImage.ts
+      - Scripts/Fetch.js
+      - Scripts/Fetch_Declaration.ts
+      - Scripts/Remote Service Module.remoteServiceModule
+      - SpectaclesInteractionKit/Assets
+      - SpectaclesInteractionKit/Core
+      - SpectaclesInteractionKit/Declarations
+      - SpectaclesInteractionKit/Decorators
+      - SpectaclesInteractionKit/Providers
+      - SpectaclesInteractionKit/Utils
+      - SpectaclesInteractionKit/package.native
+      - face_mesh.ss_graph
+      - flat 1.ss_graph
+      - flat 2.ss_graph
+      - mytexst.prefab
+      - pbr 1.ss_graph
+      - pbr 2.ss_graph
+      - pbr.ss_graph
+  options: 4
